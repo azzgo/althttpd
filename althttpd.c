@@ -280,6 +280,9 @@
 #ifndef MAX_CPU
 #define MAX_CPU 30                /* Max CPU cycles in seconds */
 #endif
+#ifndef DEFAULT_TMP_DIR
+#define DEFAULT_TMP_DIR "/tmp"        /* Default temporary directory */
+#endif
 
 /*
 ** We record most of the state information as global variables.  This
@@ -380,6 +383,31 @@ static struct {
   { "SERVER_PROTOCOL",             &zProtocol },
 };
 
+
+/*
+** Get the temporary directory to use for storing POST data.
+** This function checks multiple sources in order of preference:
+** 1. ALTHTTPD_TMPDIR environment variable
+** 2. TMPDIR environment variable  
+** 3. Compile-time DEFAULT_TMP_DIR (usually "/tmp")
+**
+** For Termux compatibility, you can set:
+**   export ALTHTTPD_TMPDIR="/data/data/com.termux/files/usr/tmp"
+*/
+static const char *GetTempDir(void){
+  const char *zTmpDir;
+  
+  /* First check for althttpd-specific temp dir */
+  zTmpDir = getenv("ALTHTTPD_TMPDIR");
+  if( zTmpDir && zTmpDir[0] ) return zTmpDir;
+  
+  /* Then check standard TMPDIR */
+  zTmpDir = getenv("TMPDIR");
+  if( zTmpDir && zTmpDir[0] ) return zTmpDir;
+  
+  /* Fall back to compile-time default */
+  return DEFAULT_TMP_DIR;
+}
 
 /*
 ** Double any double-quote characters in a string.
@@ -1909,7 +1937,7 @@ void ProcessOneRequest(int forceClose){
       exit(0);
     }
     rangeEnd = 0;
-    sprintf(zTmpNamBuf, "/tmp/-post-data-XXXXXX");
+    sprintf(zTmpNamBuf, "%s/-post-data-XXXXXX", GetTempDir());
     zTmpNam = zTmpNamBuf;
     if( mkstemp(zTmpNam)<0 ){
       Malfunction(280,  /* LOG: mkstemp() failed */
@@ -1917,7 +1945,7 @@ void ProcessOneRequest(int forceClose){
     }
     out = fopen(zTmpNam,"wb");
     if( out==0 ){
-      StartResponse("500 Cannot create /tmp file");
+      StartResponse("500 Cannot create temp file");
       nOut += printf(
         "Content-type: text/plain; charset=utf-8\r\n"
         "\r\n"
